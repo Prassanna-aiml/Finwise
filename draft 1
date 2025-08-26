@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CogniFin - Adaptive Financial Nudge Engine</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="" />
+    <link rel="stylesheet" as="style" onload="this.rel='stylesheet'" href="https://fonts.googleapis.com/css2?display=swap&family=Inter:wght@400;500;700;900&family=Noto+Sans:wght@400;500;700;900" />
+</head>
+<body style='font-family: Inter, "Noto Sans", sans-serif;'>
+    <div id="app" class="relative flex size-full min-h-screen flex-col bg-[#101923] dark group/design-root overflow-x-hidden"></div>
+
+    <script>
+        // Mock Backend Data Store
+        class MockBackend {
+            constructor() {
+                this.user = {
+                    name: 'Emily',
+                    phone: '',
+                    isLoggedIn: false
+                };
+                
+                this.transactions = [
+                    { id: 1, date: '2024-07-26', description: 'Grocery shopping at Local Market', amount: -75.50, category: 'Groceries', status: 'Completed' },
+                    { id: 2, date: '2024-07-25', description: 'Salary deposit', amount: 3500.00, category: 'Income', status: 'Completed' },
+                    { id: 3, date: '2024-07-24', description: 'Dinner at The Bistro', amount: -60.00, category: 'Dining', status: 'Completed' },
+                    { id: 4, date: '2024-07-23', description: 'Online purchase from Tech Store', amount: -250.00, category: 'Electronics', status: 'Completed' },
+                    { id: 5, date: '2024-07-22', description: 'Rent payment', amount: -1500.00, category: 'Housing', status: 'Completed' },
+                    { id: 6, date: '2024-07-21', description: 'Coffee at Coffee Corner', amount: -5.00, category: 'Coffee', status: 'Completed' },
+                    { id: 7, date: '2024-07-20', description: 'Gas station', amount: -40.00, category: 'Transportation', status: 'Completed' },
+                    { id: 8, date: '2024-07-19', description: 'Movie tickets', amount: -30.00, category: 'Entertainment', status: 'Completed' },
+                    { id: 9, date: '2024-07-18', description: 'Transfer to savings account', amount: -500.00, category: 'Transfers', status: 'Completed' },
+                    { id: 10, date: '2024-07-17', description: 'Pharmacy purchase', amount: -25.00, category: 'Health', status: 'Completed' }
+                ];
+                
+                this.receipts = [];
+                this.nextId = 11;
+            }
+            
+            login(phone) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        this.user.phone = phone;
+                        resolve({ success: true, otp: '1234' });
+                    }, 1000);
+                });
+            }
+            
+            verifyOTP(otp) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        if (otp === '1234') {
+                            this.user.isLoggedIn = true;
+                            resolve({ success: true });
+                        } else {
+                            resolve({ success: false, error: 'Invalid OTP' });
+                        }
+                    }, 500);
+                });
+            }
+            
+            // Method to reset login state
+            logout() {
+                this.user.isLoggedIn = false;
+                this.user.phone = '';
+            }
+            
+            addReceipt(receipt) {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const newTransaction = {
+                            id: this.nextId++,
+                            date: receipt.purchaseDate,
+                            description: receipt.productName,
+                            amount: -parseFloat(receipt.price),
+                            category: this.categorizeProduct(receipt.productName),
+                            status: 'Completed'
+                        };
+                        
+                        this.transactions.unshift(newTransaction);
+                        this.receipts.push({ ...receipt, id: newTransaction.id, warrantyDeadline: receipt.warrantyDeadline });
+                        resolve({ success: true, transaction: newTransaction });
+                    }, 500);
+                });
+            }
+            
+            categorizeProduct(productName) {
+                const categories = {
+                    'laptop': 'Electronics',
+                    'phone': 'Electronics',
+                    'computer': 'Electronics',
+                    'coffee': 'Coffee',
+                    'food': 'Groceries',
+                    'milk': 'Groceries',
+                    'bread': 'Groceries',
+                    'gas': 'Transportation',
+                    'fuel': 'Transportation',
+                    'movie': 'Entertainment',
+                    'book': 'Entertainment'
+                };
+                
+                for (let key in categories) {
+                    if (productName.toLowerCase().includes(key)) {
+                        return categories[key];
+                    }
+                }
+                return 'Shopping';
+            }
+            
+            getTransactions() {
+                return this.transactions;
+            }
+            
+            getInsights() {
+                const totalSpending = this.transactions
+                    .filter(t => t.amount < 0)
+                    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+                
+                const categorySpending = {};
+                this.transactions
+                    .filter(t => t.amount < 0)
+                    .forEach(t => {
+                        categorySpending[t.category] = (categorySpending[t.category] || 0) + Math.abs(t.amount);
+                    });
+                
+                return {
+                    totalSpending,
+                    categorySpending,
+                    monthlyTrend: -5,
+                    suggestions: [
+                        'Your spending on dining has increased by 15% compared to last month.',
+                        'Consider setting up automatic savings transfers.',
+                        'Review your subscriptions and cancel unused services.'
+                    ]
+                };
+            }
+        }
+
+        // Router Class
+        class Router {
+            constructor() {
+                this.routes = {};
+                this.currentRoute = 'login';
+            }
+            
+            addRoute(name, component) {
+                this.routes[name] = component;
+            }
+            
+            navigate(route) {
+                if (this.routes[route]) {
+                    this.currentRoute = route;
+                    this.render();
+                }
+            }
+            
+            render() {
+                const component = this.routes[this.currentRoute];
+                if (component) {
+                    document.getElementById('app').innerHTML = component();
+                }
+            }
+        }
+
+        // Initialize backend and router
+        const backend = new MockBackend();
+        const router = new Router();
+
+        // Utility Functions
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(amount);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString();
+        }
+
+        // Components
+        function Header(showAuth = false) {
+            return `
+                <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#223449] px-10 py-3">
+                    <div class="flex items-center gap-4 text-white">
+                        <div class="size-4">
+                            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 6H42L36 24L42 42H6L12 24L6 6Z" fill="currentColor"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">CogniFin</h2>
+                    </div>
+                    ${showAuth ? `
+                        <div class="flex flex-1 justify-end gap-8">
+                            <div class="flex items-center gap-9">
+                                <a class="text-white text-sm font-medium leading-normal cursor-pointer" onclick="router.navigate('dashboard')">Dashboard</a>
+                                <a class="text-white text-sm font-medium leading-normal cursor-pointer" onclick="router.navigate('transactions')">Transactions</a>
+                                <a class="text-white text-sm font-medium leading-normal cursor-pointer" onclick="router.navigate('receipts')">Receipts</a>
+                                <a class="text-white text-sm font-medium leading-normal cursor-pointer" onclick="router.navigate('insights')">Insights</a>
+                            </div>
+                            <button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-[#223449] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
+                                <div class="text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
+                                        <path d="M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216ZM48,184c7.7-13.24,16-43.92,16-80a64,64,0,1,1,128,0c0,36.05,8.28,66.73,16,80Z"></path>
+                                    </svg>
+                                </div>
+                            </button>
+                            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" style='background-image: url("https://images.unsplash.com/photo-1494790108755-2616b612b786?w=40&h=40&fit=crop&crop=face");'></div>
+                        </div>
+                    ` : `
+                        <div class="flex flex-1 justify-end gap-8">
+                            <div class="flex items-center gap-9">
+                                <a class="text-white text-sm font-medium leading-normal" href="#">Features</a>
+                                <a class="text-white text-sm font-medium leading-normal" href="#">Pricing</a>
+                                <a class="text-white text-sm font-medium leading-normal" href="#">Support</a>
+                            </div>
+                            <button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#223449] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                <span class="truncate">Log in</span>
+                            </button>
+                        </div>
+                    `}
+                </header>
+            `;
+        }
+
+        // Page Components
+        function LoginPage() {
+            return `
+                <div class="layout-container flex h-full grow flex-col">
+                    ${Header(false)}
+                    <div class="px-40 flex flex-1 justify-center py-5">
+                        <div class="layout-content-container flex flex-col w-[512px] max-w-[512px] py-5 max-w-[960px] flex-1">
+                            <h2 class="text-white tracking-light text-[28px] font-bold leading-tight px-4 text-center pb-3 pt-5">Welcome back</h2>
+                            <p class="text-white text-base font-normal leading-normal pb-3 pt-1 px-4 text-center">Enter your phone number to continue</p>
+                            
+                            <div id="login-form">
+                                <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                    <label class="flex flex-col min-w-40 flex-1">
+                                        <input id="phone-input" placeholder="Phone number" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                    </label>
+                                </div>
+                                <div class="flex px-4 py-3">
+                                    <button onclick="sendOTP()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 flex-1 bg-[#223449] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">Get OTP</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="otp-form" style="display: none;">
+                                <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                    <label class="flex flex-col min-w-40 flex-1">
+                                        <input id="otp-input" placeholder="Enter OTP (use: 1234)" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                    </label>
+                                </div>
+                                <div class="flex px-4 py-3">
+                                    <button onclick="verifyOTP()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 flex-1 bg-[#0d78f2] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">Continue</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="loading" style="display: none;" class="flex justify-center py-4">
+                                <div class="text-white">Processing...</div>
+                            </div>
+                            
+                            <p class="text-[#90abcb] text-sm font-normal leading-normal pb-3 pt-1 px-4 text-center">By continuing, you agree to our Terms of Service and Privacy Policy</p>
+                            
+                            <div class="mt-4 p-4 bg-[#182534] border border-[#314b68] rounded-lg">
+                                <p class="text-[#90abcb] text-sm text-center mb-2">Demo Instructions:</p>
+                                <p class="text-white text-xs text-center">Enter any phone number, then use OTP: <strong>1234</strong></p>
+                                <p class="text-[#90abcb] text-xs text-center mt-1">Authentication is required every time you access the app</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function DashboardPage() {
+            const transactions = backend.getTransactions().slice(0, 5);
+            const insights = backend.getInsights();
+            
+            return `
+                <div class="layout-container flex h-full grow flex-col">
+                    ${Header(true)}
+                    <div class="px-40 flex flex-1 justify-center py-5">
+                        <div class="layout-content-container flex flex-col max-w-[960px] flex-1">
+                            <div class="flex flex-wrap justify-between gap-3 p-4">
+                                <div class="flex min-w-72 flex-col gap-3">
+                                    <p class="text-white tracking-light text-[32px] font-bold leading-tight">Dashboard</p>
+                                    <p class="text-[#90abcb] text-sm font-normal leading-normal">Welcome back, ${backend.user.name} (${backend.user.phone})</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <button onclick="logout()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">Logout</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Quick Actions</h2>
+                            <div class="flex justify-stretch">
+                                <div class="flex flex-1 gap-3 flex-wrap px-4 py-3 justify-start">
+                                    <button onclick="router.navigate('receipts')" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#0d78f2] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">Upload Receipt</span>
+                                    </button>
+                                    <button onclick="router.navigate('transactions')" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#223449] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">View Transactions</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Recent Transactions</h2>
+                            <div class="px-4 py-3">
+                                <div class="flex overflow-hidden rounded-lg border border-[#314b68] bg-[#101923]">
+                                    <table class="flex-1">
+                                        <thead>
+                                            <tr class="bg-[#182534]">
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Date</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Description</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Amount</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Category</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${transactions.map(t => `
+                                                <tr class="border-t border-t-[#314b68]">
+                                                    <td class="h-[72px] px-4 py-2 text-[#90abcb] text-sm font-normal leading-normal">${formatDate(t.date)}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-[#90abcb] text-sm font-normal leading-normal">${t.description}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-[#90abcb] text-sm font-normal leading-normal">${formatCurrency(t.amount)}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-sm font-normal leading-normal">
+                                                        <button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-8 px-4 bg-[#223449] text-white text-sm font-medium leading-normal">
+                                                            <span class="truncate">${t.category}</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Financial Trends</h2>
+                            <div class="flex flex-wrap gap-4 px-4 py-6">
+                                <div class="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border border-[#314b68] p-6">
+                                    <p class="text-white text-base font-medium leading-normal">Spending Over Time</p>
+                                    <p class="text-white tracking-light text-[32px] font-bold leading-tight truncate">${formatCurrency(insights.totalSpending)}</p>
+                                    <div class="flex gap-1">
+                                        <p class="text-[#90abcb] text-base font-normal leading-normal">Last 3 Months</p>
+                                        <p class="text-[#fa6238] text-base font-medium leading-normal">${insights.monthlyTrend}%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="flex justify-center">
+                        <div class="flex max-w-[960px] flex-1 flex-col">
+                            <p class="text-[#90abcb] text-sm font-normal leading-normal pb-3 pt-1 px-4 text-center">© 2024 CogniFin. All rights reserved.</p>
+                        </div>
+                    </footer>
+                </div>
+            `;
+        }
+
+        function ReceiptsPage() {
+            return `
+                <div class="layout-container flex h-full grow flex-col">
+                    ${Header(true)}
+                    <div class="px-40 flex flex-1 justify-center py-5">
+                        <div class="layout-content-container flex flex-col max-w-[960px] flex-1">
+                            <div class="flex flex-wrap justify-between gap-3 p-4">
+                                <p class="text-white tracking-light text-[32px] font-bold leading-tight min-w-72">Add Receipt</p>
+                                <button onclick="logout()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                    <span class="truncate">Logout</span>
+                                </button>
+                            </div>
+                            
+                            <div class="pb-3">
+                                <div class="flex border-b border-[#314b68] px-4 gap-8">
+                                    <a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-[#90abcb] pb-[13px] pt-4 cursor-pointer" onclick="showUploadTab()">
+                                        <p class="text-[#90abcb] text-sm font-bold leading-normal tracking-[0.015em]">Upload Receipt</p>
+                                    </a>
+                                    <a class="flex flex-col items-center justify-center border-b-[3px] border-b-[#0d78f2] text-white pb-[13px] pt-4 cursor-pointer" onclick="showManualTab()">
+                                        <p class="text-white text-sm font-bold leading-normal tracking-[0.015em]">Manual Entry</p>
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <div id="upload-tab" style="display: none;">
+                                <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                    <label class="flex flex-col min-w-40 flex-1">
+                                        <p class="text-white text-base font-medium leading-normal pb-2">Upload Receipt Image</p>
+                                        <input type="file" accept="image/*" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 p-[15px] text-base font-normal leading-normal" />
+                                    </label>
+                                </div>
+                                <div class="flex px-4 py-3 justify-end">
+                                    <button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#0d78f2] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                        <span class="truncate">Process Receipt</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="manual-tab">
+                                <form onsubmit="addReceipt(event)">
+                                    <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                        <label class="flex flex-col min-w-40 flex-1">
+                                            <p class="text-white text-base font-medium leading-normal pb-2">Product Name</p>
+                                            <input id="product-name" placeholder="e.g., Laptop" required class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                        </label>
+                                    </div>
+                                    <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                        <label class="flex flex-col min-w-40 flex-1">
+                                            <p class="text-white text-base font-medium leading-normal pb-2">Price</p>
+                                            <input id="price" type="number" step="0.01" placeholder="e.g., 1200" required class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                        </label>
+                                    </div>
+                                    <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                        <label class="flex flex-col min-w-40 flex-1">
+                                            <p class="text-white text-base font-medium leading-normal pb-2">Purchase Date</p>
+                                            <input id="purchase-date" type="date" required class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                        </label>
+                                    </div>
+                                    <div class="flex max-w-[480px] flex-wrap items-end gap-4 px-4 py-3">
+                                        <label class="flex flex-col min-w-40 flex-1">
+                                            <p class="text-white text-base font-medium leading-normal pb-2">Warranty Deadline</p>
+                                            <input id="warranty-deadline" type="date" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border border-[#314b68] bg-[#182534] focus:border-[#314b68] h-14 placeholder:text-[#90abcb] p-[15px] text-base font-normal leading-normal" />
+                                        </label>
+                                    </div>
+                                    <div class="flex px-4 py-3 justify-end">
+                                        <button type="submit" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#0d78f2] text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                            <span class="truncate">Add Receipt</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            
+                            <div id="receipt-success" style="display: none;" class="px-4 py-3">
+                                <div class="bg-green-600 text-white p-4 rounded-lg">
+                                    Receipt added successfully! Redirecting to transactions...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function TransactionsPage() {
+            const transactions = backend.getTransactions();
+            
+            return `
+                <div class="layout-container flex h-full grow flex-col">
+                    ${Header(true)}
+                    <div class="px-40 flex flex-1 justify-center py-5">
+                        <div class="layout-content-container flex flex-col max-w-[960px] flex-1">
+                            <div class="flex flex-wrap justify-between gap-3 p-4">
+                                <div class="flex min-w-72 flex-col gap-3">
+                                    <p class="text-white tracking-light text-[32px] font-bold leading-tight">Transactions</p>
+                                    <p class="text-[#90abcb] text-sm font-normal leading-normal">View and manage all your transactions</p>
+                                </div>
+                                <button onclick="logout()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                    <span class="truncate">Logout</span>
+                                </button>
+                            </div>
+                            
+                            <div class="px-4 py-3">
+                                <label class="flex flex-col min-w-40 h-12 w-full">
+                                    <div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+                                        <div class="text-[#90abcb] flex border-none bg-[#223449] items-center justify-center pl-4 rounded-l-lg border-r-0">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" fill="currentColor" viewBox="0 0 256 256">
+                                                <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"></path>
+                                            </svg>
+                                        </div>
+                                        <input id="search-transactions" oninput="filterTransactions()" placeholder="Search transactions" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 focus:ring-0 border-none bg-[#223449] focus:border-none h-full placeholder:text-[#90abcb] px-4 rounded-l-none border-l-0 pl-2 text-base font-normal leading-normal" />
+                                    </div>
+                                </label>
+                            </div>
+                            
+                            <div class="flex gap-3 p-3 flex-wrap pr-4">
+                                <button onclick="filterByCategory('all')" class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-[#223449] pl-4 pr-2">
+                                    <p class="text-white text-sm font-medium leading-normal">All</p>
+                                </button>
+                                <button onclick="filterByCategory('Income')" class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-[#223449] pl-4 pr-2">
+                                    <p class="text-white text-sm font-medium leading-normal">Income</p>
+                                </button>
+                                <button onclick="filterByCategory('expenses')" class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-[#223449] pl-4 pr-2">
+                                    <p class="text-white text-sm font-medium leading-normal">Expenses</p>
+                                </button>
+                                <button onclick="filterByCategory('Transfers')" class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-[#223449] pl-4 pr-2">
+                                    <p class="text-white text-sm font-medium leading-normal">Transfers</p>
+                                </button>
+                            </div>
+                            
+                            <div class="px-4 py-3">
+                                <div class="flex overflow-hidden rounded-lg border border-[#314b68] bg-[#101923]">
+                                    <table class="flex-1">
+                                        <thead>
+                                            <tr class="bg-[#182534]">
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Date</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Description</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Category</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Amount</th>
+                                                <th class="px-4 py-3 text-left text-white text-sm font-medium leading-normal">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="transactions-table">
+                                            ${transactions.map(t => `
+                                                <tr class="border-t border-t-[#314b68] transaction-row" data-category="${t.category}" data-description="${t.description.toLowerCase()}">
+                                                    <td class="h-[72px] px-4 py-2 text-[#90abcb] text-sm font-normal leading-normal">${formatDate(t.date)}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-white text-sm font-normal leading-normal">${t.description}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-sm font-normal leading-normal">
+                                                        <button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-8 px-4 bg-[#223449] text-white text-sm font-medium leading-normal">
+                                                            <span class="truncate">${t.category}</span>
+                                                        </button>
+                                                    </td>
+                                                    <td class="h-[72px] px-4 py-2 text-[#90abcb] text-sm font-normal leading-normal">${formatCurrency(t.amount)}</td>
+                                                    <td class="h-[72px] px-4 py-2 text-sm font-normal leading-normal">
+                                                        <button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-8 px-4 bg-[#223449] text-white text-sm font-medium leading-normal">
+                                                            <span class="truncate">${t.status}</span>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function InsightsPage() {
+            const insights = backend.getInsights();
+            const categories = Object.keys(insights.categorySpending);
+            const maxSpending = Math.max(...Object.values(insights.categorySpending));
+            
+            return `
+                <div class="layout-container flex h-full grow flex-col">
+                    ${Header(true)}
+                    <div class="px-40 flex flex-1 justify-center py-5">
+                        <div class="layout-content-container flex flex-col max-w-[960px] flex-1">
+                            <div class="flex flex-wrap justify-between gap-3 p-4">
+                                <div class="flex min-w-72 flex-col gap-3">
+                                    <p class="text-white tracking-light text-[32px] font-bold leading-tight">Insights & Suggestions</p>
+                                    <p class="text-[#90abcb] text-sm font-normal leading-normal">AI-powered recommendations to help you make smarter financial decisions.</p>
+                                </div>
+                                <button onclick="logout()" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em]">
+                                    <span class="truncate">Logout</span>
+                                </button>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Spending Analysis</h2>
+                            <div class="flex flex-wrap gap-4 px-4 py-6">
+                                <div class="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border border-[#314b68] p-6">
+                                    <p class="text-white text-base font-medium leading-normal">Monthly Spending by Category</p>
+                                    <div class="grid min-h-[180px] grid-flow-col gap-6 grid-rows-[1fr_auto] items-end justify-items-center px-3">
+                                        ${categories.map(category => {
+                                            const height = (insights.categorySpending[category] / maxSpending) * 100;
+                                            return `
+                                                <div class="border-[#90abcb] bg-[#223449] border-t-2 w-full" style="height: ${Math.max(height, 10)}%;"></div>
+                                                <p class="text-[#90abcb] text-[13px] font-bold leading-normal tracking-[0.015em]">${category}</p>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="px-4 py-3">
+                                <div class="bg-[#182534] border border-[#314b68] rounded-lg p-4">
+                                    <h3 class="text-white text-lg font-bold mb-2">Smart Insights</h3>
+                                    ${insights.suggestions.map(suggestion => `
+                                        <p class="text-[#90abcb] text-sm leading-normal mb-2">• ${suggestion}</p>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Savings Opportunities</h2>
+                            <div class="p-4">
+                                <div class="flex items-stretch justify-between gap-4 rounded-lg bg-[#182534] border border-[#314b68] p-4">
+                                    <div class="flex flex-col gap-1 flex-[2_2_0px]">
+                                        <p class="text-white text-base font-bold leading-tight">Automate Your Savings</p>
+                                        <p class="text-[#90abcb] text-sm font-normal leading-normal">Set up automatic transfers to your savings account to reach your financial goals faster.</p>
+                                        <button class="mt-2 px-4 py-2 bg-[#0d78f2] text-white text-sm font-bold rounded-lg">Set Up Auto-Save</button>
+                                    </div>
+                                    <div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg flex-1" style='background-image: url("https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=300&h=200&fit=crop");'></div>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Investment Recommendations</h2>
+                            <div class="p-4">
+                                <div class="flex items-stretch justify-between gap-4 rounded-lg bg-[#182534] border border-[#314b68] p-4">
+                                    <div class="flex flex-col gap-1 flex-[2_2_0px]">
+                                        <p class="text-white text-base font-bold leading-tight">Diversify Your Portfolio</p>
+                                        <p class="text-[#90abcb] text-sm font-normal leading-normal">Consider investing in a mix of stocks and bonds to balance risk and potential returns.</p>
+                                        <button class="mt-2 px-4 py-2 bg-[#0d78f2] text-white text-sm font-bold rounded-lg">Learn More</button>
+                                    </div>
+                                    <div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg flex-1" style='background-image: url("https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=300&h=200&fit=crop");'></div>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Debt Management</h2>
+                            <div class="p-4">
+                                <div class="flex items-stretch justify-between gap-4 rounded-lg bg-[#182534] border border-[#314b68] p-4">
+                                    <div class="flex flex-col gap-1 flex-[2_2_0px]">
+                                        <p class="text-white text-base font-bold leading-tight">Consolidate Your Debts</p>
+                                        <p class="text-[#90abcb] text-sm font-normal leading-normal">Explore options for consolidating high-interest debts to lower your overall interest payments.</p>
+                                        <button class="mt-2 px-4 py-2 bg-[#0d78f2] text-white text-sm font-bold rounded-lg">Get Started</button>
+                                    </div>
+                                    <div class="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg flex-1" style='background-image: url("https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=300&h=200&fit=crop");'></div>
+                                </div>
+                            </div>
+                            
+                            <h2 class="text-white text-[22px] font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">Warranty Alerts</h2>
+                            <div class="p-4">
+                                <div class="bg-[#182534] border border-[#314b68] rounded-lg p-4">
+                                    <h3 class="text-white text-lg font-bold mb-2">Upcoming Warranty Expirations</h3>
+                                    ${backend.receipts.filter(r => r.warrantyDeadline && new Date(r.warrantyDeadline) > new Date()).map(receipt => `
+                                        <div class="flex justify-between items-center py-2 border-b border-[#314b68]">
+                                            <div>
+                                                <p class="text-white text-sm font-medium">${receipt.productName}</p>
+                                                <p class="text-[#90abcb] text-xs">Expires: ${formatDate(receipt.warrantyDeadline)}</p>
+                                            </div>
+                                            <span class="text-yellow-400 text-xs font-bold">⚠️ Expiring Soon</span>
+                                        </div>
+                                    `).join('') || '<p class="text-[#90abcb] text-sm">No warranties expiring soon.</p>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Event Handlers
+        async function sendOTP() {
+            const phone = document.getElementById('phone-input').value;
+            if (!phone) {
+                alert('Please enter your phone number');
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const result = await backend.login(phone);
+                if (result.success) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('login-form').style.display = 'none';
+                    document.getElementById('otp-form').style.display = 'block';
+                    // Show OTP in console for demo purposes
+                    console.log(`Demo OTP: ${result.otp}`);
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                alert('Error sending OTP');
+            }
+        }
+
+        async function verifyOTP() {
+            const otp = document.getElementById('otp-input').value;
+            if (!otp) {
+                alert('Please enter the OTP');
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const result = await backend.verifyOTP(otp);
+                document.getElementById('loading').style.display = 'none';
+                
+                if (result.success) {
+                    router.navigate('dashboard');
+                } else {
+                    alert(result.error || 'Invalid OTP');
+                }
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                alert('Error verifying OTP');
+            }
+        }
+
+        function logout() {
+            backend.logout();
+            router.navigate('login');
+        }
+
+        function showUploadTab() {
+            document.getElementById('upload-tab').style.display = 'block';
+            document.getElementById('manual-tab').style.display = 'none';
+        }
+
+        function showManualTab() {
+            document.getElementById('upload-tab').style.display = 'none';
+            document.getElementById('manual-tab').style.display = 'block';
+        }
+
+        async function addReceipt(event) {
+            event.preventDefault();
+            
+            const receipt = {
+                productName: document.getElementById('product-name').value,
+                price: document.getElementById('price').value,
+                purchaseDate: document.getElementById('purchase-date').value,
+                warrantyDeadline: document.getElementById('warranty-deadline').value
+            };
+            
+            try {
+                const result = await backend.addReceipt(receipt);
+                if (result.success) {
+                    document.getElementById('receipt-success').style.display = 'block';
+                    document.querySelector('form').style.display = 'none';
+                    
+                    setTimeout(() => {
+                        router.navigate('transactions');
+                    }, 2000);
+                }
+            } catch (error) {
+                alert('Error adding receipt');
+            }
+        }
+
+        function filterTransactions() {
+            const searchTerm = document.getElementById('search-transactions').value.toLowerCase();
+            const rows = document.querySelectorAll('.transaction-row');
+            
+            rows.forEach(row => {
+                const description = row.getAttribute('data-description');
+                if (description.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        function filterByCategory(category) {
+            const rows = document.querySelectorAll('.transaction-row');
+            
+            rows.forEach(row => {
+                const rowCategory = row.getAttribute('data-category');
+                if (category === 'all' || 
+                    category === rowCategory || 
+                    (category === 'expenses' && !rowCategory.includes('Income') && !rowCategory.includes('Transfers'))) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // Authentication Guard
+        function requireAuth() {
+            if (!backend.user.isLoggedIn && router.currentRoute !== 'login') {
+                router.navigate('login');
+                return false;
+            }
+            return true;
+        }
+
+        // Register routes
+        router.addRoute('login', LoginPage);
+        router.addRoute('dashboard', () => requireAuth() ? DashboardPage() : '');
+        router.addRoute('receipts', () => requireAuth() ? ReceiptsPage() : '');
+        router.addRoute('transactions', () => requireAuth() ? TransactionsPage() : '');
+        router.addRoute('insights', () => requireAuth() ? InsightsPage() : '');
+
+        // Initialize app - Always start at login
+        function init() {
+            // Always reset login state on app start
+            backend.logout();
+            router.navigate('login');
+        }
+
+        // Start the application
+        window.addEventListener('load', init);
+
+        // Handle page refresh/reload - always require authentication
+        window.addEventListener('beforeunload', () => {
+            backend.logout();
+        });
+
+        // Make functions available globally
+        window.sendOTP = sendOTP;
+        window.verifyOTP = verifyOTP;
+        window.logout = logout;
+        window.showUploadTab = showUploadTab;
+        window.showManualTab = showManualTab;
+        window.addReceipt = addReceipt;
+        window.filterTransactions = filterTransactions;
+        window.filterByCategory = filterByCategory;
+        window.router = router;
+        window.backend = backend;
+    </script>
+</body>
+</html>
